@@ -1,51 +1,51 @@
-# PiperX + Xbox + 双相机 + π0.5
+# PiperX + Xbox + Dual-Camera π0.5
 
-使用一台 AgileX Piper-X、一个 Xbox 手柄和两路 RGB 相机，完成 LeRobot 数据采集、OpenPI π0.5 LoRA 离线微调以及带安全门控的真机推理。
+An end-to-end pipeline for collecting LeRobot demonstrations, offline LoRA fine-tuning OpenPI π0.5, and running safety-gated real-robot inference with one AgileX Piper-X arm, an Xbox controller, and two RGB cameras.
 
-本项目不需要额外的 leader arm 或专用示教器。Xbox 只用于采集示范；部署阶段由微调后的策略直接控制机械臂。
+No leader arm or dedicated teaching pendant is required. The Xbox controller is used to collect demonstrations; during deployment, the fine-tuned policy controls the robot directly.
 
-> ⚠️ 本仓库是研究原型，不是经过安全认证的工业控制器。运行真机前必须确保物理急停可触达、工作区无人，并先完成低速预检。任何学习策略都可能输出不可预期动作。
+> ⚠️ This repository is a research prototype, not a safety-certified industrial controller. Before operating the real robot, keep the physical emergency stop within reach, clear the workspace, and complete all low-speed preflight checks. A learned policy can always produce unexpected actions.
 
-## 功能
+## Features
 
-- Xbox 关节空间遥操作：LB 死手开关，摇杆/十字键控制 6 个关节，扳机控制夹爪
-- 第三视角 + 腕部相机同步采集
-- LeRobot v2.1 数据集：绝对关节/夹爪目标、状态、视频、任务文本和采集诊断量
-- OpenPI/JAX π0.5 LoRA：7 维 Piper-X 动作适配、双相机映射、PyAV 解码
-- RTX 4090 单卡训练脚本，默认 batch size 16、20,000 steps
-- 真机推理：ENABLE 门控、首次动作预检、硬限位检查、逐步限速、跟踪误差监控和动作 chunk 执行
-- 策略结束或异常时进入位置 HOLD；只有 Ctrl+C 才执行急停并失能
+- Joint-space Xbox teleoperation: LB deadman switch, sticks/D-pad for six joints, and triggers for the gripper
+- Synchronized third-person and wrist-camera recording
+- LeRobot v2.1 datasets containing absolute joint/gripper targets, robot state, video, task text, and collection diagnostics
+- OpenPI/JAX π0.5 LoRA integration with a 7-D Piper-X action adapter, dual-camera mapping, and PyAV decoding
+- Single-GPU RTX 4090 training scripts with a default batch size of 16 and 20,000 optimization steps
+- Real-robot inference with an `ENABLE` gate, first-action validation, hard-limit checks, per-step rate limiting, tracking-error monitoring, and action-chunk execution
+- Position HOLD when inference finishes or recoverable failures occur; Ctrl+C exits HOLD and disables the robot
 
-## 已验证配置
+## Validated Setup
 
-| 项目 | 配置 |
+| Component | Configuration |
 |---|---|
-| 机械臂 | AgileX Piper-X，6 DoF + gripper，USB-CAN `can0` |
-| 示教输入 | Xbox Series Controller，USB/蓝牙 |
-| 相机 | 1×第三视角 + 1×腕部 RGB，640×480@30 Hz |
-| 数据 | 50 episodes，26,567 frames，15 Hz，LeRobot v2.1 |
-| 模型 | OpenPI π0.5 base，LoRA-style 部分参数微调 |
-| 训练 | RTX 4090 24 GB，batch 16，20,000 steps |
-| 推理 | horizon 16，每轮默认执行前 10 步，15 Hz |
+| Robot | AgileX Piper-X, 6 DoF + gripper, USB-CAN on `can0` |
+| Teleoperation | Xbox Series Controller over USB or Bluetooth |
+| Cameras | One third-person RGB camera + one wrist RGB camera, 640×480 at 30 Hz |
+| Dataset | 50 episodes, 26,567 frames, 15 Hz, LeRobot v2.1 |
+| Model | OpenPI π0.5 base with LoRA-style partial-parameter fine-tuning |
+| Training | RTX 4090 24 GB, batch size 16, 20,000 steps |
+| Inference | Horizon 16, execute the first 10 actions per chunk by default, 15 Hz |
 
-完整实验设置见 [`docs/pi05_piperx_training_setup_zh.md`](docs/pi05_piperx_training_setup_zh.md)。
+The complete experiment record is available in Chinese at [`docs/pi05_piperx_training_setup_zh.md`](docs/pi05_piperx_training_setup_zh.md).
 
-## 仓库结构
+## Repository Layout
 
 ```text
 .
-├── openpi_overlay/       # Piper-X policy adapter，复制到指定 OpenPI commit
-├── patches/              # OpenPI 训练配置与 LeRobot PyAV 适配补丁
-├── scripts/              # CAN、遥操作、采集、训练和部署脚本
-├── tests/                # 不连接真机的单元测试
-└── docs/                 # 实验配置和复现说明
+├── openpi_overlay/       # Piper-X policy adapter copied into the pinned OpenPI commit
+├── patches/              # OpenPI training config and LeRobot PyAV patch
+├── scripts/              # CAN, teleoperation, recording, training, and deployment tools
+├── tests/                # Unit tests that do not connect to the real robot
+└── docs/                 # Experiment configuration and reproduction notes
 ```
 
-OpenPI、Piper SDK 和 Gamepad_PiPER 不直接复制进本仓库。固定的上游版本和许可证见 [`NOTICE`](NOTICE)。
+The full OpenPI, Piper SDK, and Gamepad_PiPER source trees are intentionally not vendored. See [`NOTICE`](NOTICE) for pinned upstream revisions and licenses.
 
-## 1. 安装
+## 1. Installation
 
-要求 Ubuntu 22.04、Python 3.11、支持 SocketCAN 的 USB-CAN、NVIDIA 驱动和 `uv`。
+The validated environment uses Ubuntu 22.04, Python 3.11, a SocketCAN-compatible USB-CAN adapter, an NVIDIA GPU driver, and [`uv`](https://docs.astral.sh/uv/).
 
 ```bash
 git clone https://github.com/Xun0523/piperx-xbox-pi05.git
@@ -63,11 +63,11 @@ cd ..
 ./scripts/apply_openpi_overlay.sh
 ```
 
-补丁只针对上面的 OpenPI commit 验证。不要直接应用到任意新版本。
+The patch is validated only against the pinned OpenPI commit above. Do not apply it blindly to an arbitrary newer revision.
 
-## 2. 配置相机与 CAN
+## 2. Camera and CAN Configuration
 
-优先使用不会随重启变化的 `/dev/v4l/by-id/` 路径：
+Prefer stable `/dev/v4l/by-id/` camera paths instead of `/dev/videoN`, which may change after a reboot:
 
 ```bash
 ls -l /dev/v4l/by-id/
@@ -76,7 +76,7 @@ export PIPERX_THIRD_PERSON_CAMERA=/dev/v4l/by-id/<third-person-camera>-video-ind
 export PIPERX_WRIST_CAMERA=/dev/v4l/by-id/<wrist-camera>-video-index0
 ```
 
-启用并检查 CAN：
+Bring up and validate CAN:
 
 ```bash
 ./scripts/setup_can.sh
@@ -84,29 +84,29 @@ export PIPERX_WRIST_CAMERA=/dev/v4l/by-id/<wrist-camera>-video-index0
 ./scripts/check_piper_status.sh
 ```
 
-如需锁定指定 USB-CAN，可设置：
+To require a specific USB-CAN adapter, set its serial number:
 
 ```bash
 export PIPERX_CAN_SERIAL=<serial-from-check_can_stability>
 ```
 
-## 3. 输入与真机遥操作测试
+## 3. Input and Real-Robot Teleoperation Tests
 
-先在不连接 CAN、不运动机械臂的模式下检查手柄和相机：
+First verify both cameras and the Xbox controller without opening CAN or moving the robot:
 
 ```bash
 ./scripts/test_cameras_xbox.sh
 ```
 
-再运行真机低速遥操作测试：
+Then run the low-speed real-robot teleoperation test:
 
 ```bash
 ./scripts/test_teleop.sh
 ```
 
-必须在终端输入 `ENABLE` 后机械臂才会使能。Xbox 在不同内核驱动下的轴编号可能不同，第一次运行必须逐轴低速确认方向。
+The robot is not enabled until the operator types `ENABLE` in the terminal. Xbox axis indices can vary across Linux controller drivers, so verify every axis and direction individually at low speed before collecting data.
 
-## 4. 采集 LeRobot 数据
+## 4. Record a LeRobot Dataset
 
 ```bash
 ./scripts/record.sh \
@@ -117,69 +117,69 @@ export PIPERX_CAN_SERIAL=<serial-from-check_can_stability>
   --joint-speed-deg-s 10
 ```
 
-控制映射：
+Controller mapping:
 
-| 输入 | 功能 |
+| Input | Function |
 |---|---|
-| LB（按住） | 允许更新动作目标；松开后保持实测姿态 |
-| 左摇杆 | J1 / J2 |
-| 右摇杆 | J6 / J3 |
-| 十字键 | J4 / J5 |
-| LT / RT | 关闭 / 打开夹爪 |
-| A | 开始 episode |
-| Y | 保存 episode |
-| X | 丢弃并重录 |
-| B | 软件急停并退出 |
-| START | 未录制时退出 |
+| Hold LB | Allow target updates; releasing LB holds the measured pose |
+| Left stick | J1 / J2 |
+| Right stick | J6 / J3 |
+| D-pad | J4 / J5 |
+| LT / RT | Close / open the gripper |
+| A | Start an episode |
+| Y | Save the current episode |
+| X | Discard and re-record the current episode |
+| B | Software emergency stop and exit |
+| START | Exit while no episode is being recorded |
 
-数据默认写入 `data/lerobot/local/piperx_pi05`。已有数据集继续采集时增加 `--resume`。
+By default, data is written to `data/lerobot/local/piperx_pi05`. Add `--resume` to append episodes to an existing dataset.
 
-## 5. π0.5 LoRA 离线微调
+## 5. Offline π0.5 LoRA Fine-Tuning
 
 ```bash
 ./scripts/train_pi05_piperx.sh
 ```
 
-常用覆盖参数：
+Common overrides:
 
 ```bash
 BATCH_SIZE=8 NUM_TRAIN_STEPS=20000 EXP_NAME=my_run \
   ./scripts/train_pi05_piperx.sh
 ```
 
-恢复同名实验：
+Resume an experiment with the same name:
 
 ```bash
 EXP_NAME=my_run ./scripts/resume_pi05_bs16.sh
 ```
 
-这一步是离线微调，不是边执行边更新参数的在线微调。训练脚本默认保留每 1,000 steps 的候选 checkpoint，`latest` 与最终 `best` 应通过独立真机评测区分。
+This is offline fine-tuning, not online parameter updates during robot execution. The training workflow retains checkpoint candidates every 1,000 steps. Treat `latest` as the recovery checkpoint and select `best` separately through held-out real-robot evaluation.
 
-## 6. 加载 checkpoint 并运行真机
+## 6. Load a Checkpoint and Run the Robot
 
-终端一启动策略服务器：
+Start the policy server in terminal 1:
 
 ```bash
 CHECKPOINT=/absolute/path/to/checkpoint ./scripts/serve_pi05_piperx.sh
 ```
 
-终端二先做干运行，不使能机械臂：
+Run a dry test in terminal 2. This connects to the policy and cameras but never enables the robot:
 
 ```bash
 ./scripts/run_pi05_piperx.sh
 ```
 
-干运行及相机位置确认通过后，再运行真机：
+After the dry run and camera-position checks pass, enable real-robot execution:
 
 ```bash
 ./scripts/run_pi05_piperx.sh --enable-motion --execute-steps 10
 ```
 
-流程会先预热模型，然后持续显示两路相机和机械臂状态。输入 `ENABLE` 后仍会在机械臂未使能时执行首个动作预检；通过后才开始运动。
+The client first warms up the model, then continuously displays both camera streams and robot state. After the operator types `ENABLE`, the first policy action is still checked while the motors remain disabled. Motion begins only if that check passes.
 
-策略连续静止、超时、相机异常或推理异常时，程序停止模型推理但保持最后目标和电机使能，防止机械臂突然下落。确认安全后按 Ctrl+C，程序才会执行软件急停并失能。
+When the policy remains stationary, reaches its runtime limit, loses a camera, or encounters a recoverable inference error, model inference stops while the robot continues holding its last target. This avoids an uncontrolled drop. After confirming the scene is safe, press Ctrl+C to execute the software emergency stop and disable the motors. Lower-level safety faults can trigger an immediate emergency stop automatically.
 
-## 测试
+## Tests
 
 ```bash
 cd openpi
@@ -187,13 +187,13 @@ cd openpi
   ../openpi_overlay/src/openpi/policies/piperx_policy_test.py
 ```
 
-这些测试不发送 CAN 动作，但不能替代真实机械臂的低速安全验证。
+These tests do not send CAN commands, but they do not replace supervised low-speed validation on the real robot.
 
-## 数据集与模型
+## Dataset and Model Release
 
-第一版仓库不包含基础模型、训练 checkpoint 和完整真机数据集。它们体积较大，也可能包含实验环境图像；后续应通过 Hugging Face Dataset/Model 仓库独立发布，并附数据许可和隐私检查。
+The initial code release does not include the base model, training checkpoints, or the complete real-robot dataset. These artifacts are large and may contain images of the experiment environment. They should be released separately through Hugging Face Dataset and Model repositories after license and privacy review.
 
-## 致谢
+## Acknowledgements
 
 - [Physical-Intelligence/openpi](https://github.com/Physical-Intelligence/openpi)
 - [huggingface/lerobot](https://github.com/huggingface/lerobot)
@@ -202,4 +202,4 @@ cd openpi
 
 ## License
 
-本项目采用 Apache-2.0。第三方项目仍受各自许可证约束，详见 [`NOTICE`](NOTICE)。
+This project is licensed under Apache-2.0. Third-party components remain subject to their respective licenses; see [`NOTICE`](NOTICE).
