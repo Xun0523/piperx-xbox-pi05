@@ -1,0 +1,32 @@
+PiperX Xbox PI0.5
+Copyright 2026 Xun0523
+
+This repository contains original integration code and small modifications
+designed to be applied to third-party projects. It does not redistribute the
+full third-party source trees.
+
+OpenPI
+  Source: https://github.com/Physical-Intelligence/openpi
+  Tested commit: 15a9616a00943ada6c20a0f158e3adb39df2ccac
+  License: Apache License 2.0
+
+LeRobot
+  Source: https://github.com/huggingface/lerobot
+  Commit selected by the tested OpenPI pyproject:
+    0cf864870cf29f4738d3ade893e6fd13fbd7cdb5
+  License: Apache License 2.0
+
+AgileX Piper SDK
+  Source: https://github.com/agilexrobotics/piper_sdk
+  Tested commit: c9e8a28174e71eeaac448593cb65f8ab258a92fe
+  Tested package version: 0.6.2
+  License: MIT
+
+Gamepad_PiPER
+  Source: https://github.com/kehuanjack/Gamepad_PiPER
+  Reference commit: aa00c80e100d687a5f4a386b79b83ece06b3a30f
+  License: MIT
+
+The Xbox mappings in this repository were informed by Gamepad_PiPER but were
+implemented as a separate minimal joint-space recorder with different safety,
+dataset, and episode-control semantics.

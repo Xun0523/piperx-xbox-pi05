@@ -1,0 +1,34 @@
+# Local dependencies and generated environments
+openpi/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.uv-cache/
+.hf-cache/
+
+# Robot datasets, checkpoints and logs
+data/
+checkpoints/
+outputs/
+*.log
+*.mp4
+*.parquet
+*.safetensors
+*.ckpt
+*.pt
+*.pth
+
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# IDE and OS files
+.vscode/
+.idea/
+.DS_Store

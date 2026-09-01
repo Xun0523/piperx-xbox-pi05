@@ -1,0 +1,122 @@
+diff --git a/src/openpi/training/config.py b/src/openpi/training/config.py
+index 4ca47e1..f917c22 100644
+--- a/src/openpi/training/config.py
++++ b/src/openpi/training/config.py
+@@ -20,6 +20,7 @@ import openpi.models.tokenizer as _tokenizer
+ import openpi.policies.aloha_policy as aloha_policy
+ import openpi.policies.droid_policy as droid_policy
+ import openpi.policies.libero_policy as libero_policy
++import openpi.policies.piperx_policy as piperx_policy
+ import openpi.shared.download as _download
+ import openpi.shared.normalize as _normalize
+ import openpi.training.droid_rlds_dataset as droid_rlds_dataset
+@@ -87,6 +88,10 @@ class DataConfig:
+     # LeRobot dataset is using different keys to represent the action.
+     action_sequence_keys: Sequence[str] = ("actions",)
+ 
++    # Video decoder passed to LeRobot. PiperX uses PyAV because TorchCodec
++    # requires system FFmpeg shared libraries that are not present on this host.
++    video_backend: str | None = None
++
+     # If true, will use the LeRobot dataset task to define the prompt.
+     prompt_from_task: bool = False
+ 
+@@ -355,6 +360,48 @@ class LeRobotLiberoDataConfig(DataConfigFactory):
+         )
+ 
+ 
++@dataclasses.dataclass(frozen=True)
++class LeRobotPiperXDataConfig(DataConfigFactory):
++    """Transforms for the local single-arm PiperX LeRobot dataset."""
++
++    @override
++    def create(self, assets_dirs: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
++        repack_transform = _transforms.Group(
++            inputs=[
++                _transforms.RepackTransform(
++                    {
++                        "observation/image": "observation.images.third_person",
++                        "observation/wrist_image": "observation.images.wrist",
++                        "observation/state": "observation.state",
++                        "actions": "action",
++                        "prompt": "prompt",
++                    }
++                )
++            ]
++        )
++        # The recorder stores absolute joint/gripper command targets. PI0.5 is
++        # trained on joint deltas while the gripper remains absolute.
++        delta_action_mask = _transforms.make_bool_mask(6, -1)
++        data_transforms = _transforms.Group(
++            inputs=[
++                piperx_policy.PiperXInputs(model_type=model_config.model_type),
++                _transforms.DeltaActions(delta_action_mask),
++            ],
++            outputs=[
++                _transforms.AbsoluteActions(delta_action_mask),
++                piperx_policy.PiperXOutputs(),
++            ],
++        )
++        return dataclasses.replace(
++            self.create_base_config(assets_dirs, model_config),
++            repack_transforms=repack_transform,
++            data_transforms=data_transforms,
++            model_transforms=ModelTransformFactory()(model_config),
++            action_sequence_keys=("action",),
++            video_backend="pyav",
++        )
++
++
+ @dataclasses.dataclass(frozen=True)
+ class RLDSDroidDataConfig(DataConfigFactory):
+     """
+@@ -761,6 +808,37 @@ _CONFIGS = [
+         pytorch_weight_path="/path/to/your/pytorch_weight_path",
+         num_train_steps=30_000,
+     ),
++    TrainConfig(
++        name="pi05_piperx_lora",
++        model=pi0_config.Pi0Config(
++            pi05=True,
++            action_dim=32,
++            action_horizon=16,
++            paligemma_variant="gemma_2b_lora",
++            action_expert_variant="gemma_300m_lora",
++        ),
++        data=LeRobotPiperXDataConfig(
++            repo_id="local/piperx_pi05",
++            base_config=DataConfig(prompt_from_task=True),
++        ),
++        weight_loader=weight_loaders.CheckpointWeightLoader(
++            "gs://openpi-assets/checkpoints/pi05_base/params"
++        ),
++        freeze_filter=pi0_config.Pi0Config(
++            pi05=True,
++            action_dim=32,
++            action_horizon=16,
++            paligemma_variant="gemma_2b_lora",
++            action_expert_variant="gemma_300m_lora",
++        ).get_freeze_filter(),
++        batch_size=1,
++        num_workers=2,
++        num_train_steps=20_000,
++        save_interval=1_000,
++        keep_period=5_000,
++        ema_decay=None,
++        wandb_enabled=False,
++    ),
+     #
+     # Fine-tuning Aloha configs.
+     #
+diff --git a/src/openpi/training/data_loader.py b/src/openpi/training/data_loader.py
+index e2ee7dd..0acdb4b 100644
+--- a/src/openpi/training/data_loader.py
++++ b/src/openpi/training/data_loader.py
+@@ -143,6 +143,7 @@ def create_torch_dataset(
+         delta_timestamps={
+             key: [t / dataset_meta.fps for t in range(action_horizon)] for key in data_config.action_sequence_keys
+         },
++        video_backend=data_config.video_backend,
+     )
+ 
+     if data_config.prompt_from_task:
